@@ -1,7 +1,9 @@
 import asyncio
 import logging
 import os
+from datetime import datetime
 from dotenv import load_dotenv
+import asyncpg
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
@@ -11,11 +13,100 @@ from aiogram.fsm.state import State, StatesGroup
 load_dotenv()
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
+DATABASE_URL = os.getenv('DATABASE_URL')
 CHANNEL_LINK = "ссылка"  # Замените на реальную ссылку на канал
 ELENA_CONTACT = "@Lebedeva_Elen"
+ADMIN_CHAT_ID = 269435099  # chat_id администратора
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
+
+# Функции для работы с базой данных
+async def get_db_connection():
+    try:
+        return await asyncpg.connect(DATABASE_URL)
+    except Exception as e:
+        logging.error(f"Database connection error: {e}")
+        return None
+
+async def init_database():
+    """Создание таблиц при запуске бота"""
+    conn = await get_db_connection()
+    if not conn:
+        return
+
+    try:
+        # Создание таблицы пользователей
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS mss_users (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT UNIQUE NOT NULL,
+                username VARCHAR(255),
+                first_name VARCHAR(255),
+                last_name VARCHAR(255),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Создание таблицы сообщений
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS mss_chat (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                username VARCHAR(255),
+                message_text TEXT,
+                message_type VARCHAR(100),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        logging.info("Database tables initialized successfully")
+
+    except Exception as e:
+        logging.error(f"Database initialization error: {e}")
+    finally:
+        await conn.close()
+
+async def add_user_to_db(user: types.User):
+    """Добавление пользователя в БД"""
+    conn = await get_db_connection()
+    if not conn:
+        return
+
+    try:
+        await conn.execute('''
+            INSERT INTO mss_users (user_id, username, first_name, last_name, last_activity)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (user_id)
+            DO UPDATE SET
+                username = EXCLUDED.username,
+                first_name = EXCLUDED.first_name,
+                last_name = EXCLUDED.last_name,
+                last_activity = EXCLUDED.last_activity
+        ''', user.id, user.username, user.first_name, user.last_name, datetime.now())
+
+    except Exception as e:
+        logging.error(f"Error adding user to database: {e}")
+    finally:
+        await conn.close()
+
+async def log_message_to_db(user: types.User, message_text: str, message_type: str = "text"):
+    """Логирование сообщения в БД"""
+    conn = await get_db_connection()
+    if not conn:
+        return
+
+    try:
+        await conn.execute('''
+            INSERT INTO mss_chat (user_id, username, message_text, message_type)
+            VALUES ($1, $2, $3, $4)
+        ''', user.id, user.username, message_text, message_type)
+
+    except Exception as e:
+        logging.error(f"Error logging message to database: {e}")
+    finally:
+        await conn.close()
 
 def get_main_keyboard():
     return ReplyKeyboardMarkup(keyboard=[
@@ -35,6 +126,12 @@ class SupportStates(StatesGroup):
 
 @dp.message(CommandStart())
 async def start_handler(message: Message):
+    # Добавляем пользователя в БД
+    await add_user_to_db(message.from_user)
+
+    # Логируем команду /start
+    await log_message_to_db(message.from_user, "/start", "command")
+
     welcome_text = f"""Здравствуйте! Добро пожаловать!
 
 Я – Елена Лебедева, а это – официальный бот курса "Излагай ясно" для подростков и взрослых.
@@ -49,6 +146,8 @@ async def start_handler(message: Message):
 
 @dp.message(lambda message: message.text == "📚 Узнать о курсе")
 async def handle_about_course(message: Message):
+    await add_user_to_db(message.from_user)
+    await log_message_to_db(message.from_user, message.text, "menu_button")
     course_text = """📚 Узнать подробнее о курсе "Излагай ясно"
 
 Курс по развитию устной и письменной речи.
@@ -83,6 +182,8 @@ async def handle_about_course(message: Message):
 
 @dp.message(lambda message: message.text == "👥 Для какого возраста")
 async def handle_age_info(message: Message):
+    await add_user_to_db(message.from_user)
+    await log_message_to_db(message.from_user, message.text, "menu_button")
     age_text = """👥 Для какого возраста курс?
 
 Курс «Излагай ясно» для подростков 9-16 лет.
@@ -114,6 +215,8 @@ async def handle_age_info(message: Message):
 
 @dp.message(lambda message: message.text == "📋 Формат занятий")
 async def handle_format_info(message: Message):
+    await add_user_to_db(message.from_user)
+    await log_message_to_db(message.from_user, message.text, "menu_button")
     format_text = """📋 Какой формат занятий?
 
 24 "живые" групповые встречи онлайн. Запись будет.
@@ -129,6 +232,8 @@ async def handle_format_info(message: Message):
 
 @dp.message(lambda message: message.text == "🎯 Результаты курса")
 async def handle_results_info(message: Message):
+    await add_user_to_db(message.from_user)
+    await log_message_to_db(message.from_user, message.text, "menu_button")
     results_text = """🎯 Что ребенок будет знать и уметь к концу курса?
 
 «Мне не дано писать сочинение», — так никогда не скажет ученик полностью освоивший все 9 структур курса "Излагай ясно".
@@ -169,6 +274,8 @@ async def handle_results_info(message: Message):
 
 @dp.message(lambda message: message.text == "⏰ Как проходят занятия")
 async def handle_schedule_info(message: Message):
+    await add_user_to_db(message.from_user)
+    await log_message_to_db(message.from_user, message.text, "menu_button")
     schedule_text = """⏰ Как проходят занятия?
 
 👥 до 10 человек в группе
@@ -214,6 +321,8 @@ async def handle_schedule_info(message: Message):
 
 @dp.message(lambda message: message.text == "💰 Оплата")
 async def handle_payment_info(message: Message):
+    await add_user_to_db(message.from_user)
+    await log_message_to_db(message.from_user, message.text, "menu_button")
     payment_text = f"""💰 Как оплатить?
 
 💳 Оплата:
@@ -232,6 +341,8 @@ async def handle_payment_info(message: Message):
 
 @dp.message(lambda message: message.text == "📄 Договор оферты")
 async def handle_contract_info(message: Message):
+    await add_user_to_db(message.from_user)
+    await log_message_to_db(message.from_user, message.text, "menu_button")
     contract_text = """📄 Прочитайте договор оферты перед оплатой
 
 📋 Договор оферты содержит все необходимые условия предоставления услуг по курсу "Излагай ясно".
@@ -244,6 +355,8 @@ async def handle_contract_info(message: Message):
 
 @dp.message(lambda message: message.text == "🆘 Связаться с поддержкой")
 async def handle_support_button(message: Message, state: FSMContext):
+    await add_user_to_db(message.from_user)
+    await log_message_to_db(message.from_user, message.text, "menu_button")
     support_text = """🆘 Связаться с поддержкой
 
 Опишите кратко ваш вопрос, и мы ответим вам сразу, как только сможем!
@@ -268,30 +381,67 @@ async def process_support_callback(callback_query: types.CallbackQuery, state: F
 
 @dp.message(SupportStates.waiting_for_question)
 async def process_support_question(message: Message, state: FSMContext):
+    # Добавляем пользователя в БД
+    await add_user_to_db(message.from_user)
+    # Логируем вопрос поддержки
+    await log_message_to_db(message.from_user, message.text, "support_question")
+
     user_question = message.text
     user_info = f"@{message.from_user.username}" if message.from_user.username else f"ID: {message.from_user.id}"
     user_name = message.from_user.full_name
 
-    confirmation_text = f"""✅ Ваш вопрос получен!
+    # Отправляем вопрос Елене
+    support_message = f"""🆘 Новый вопрос от пользователя бота:
+
+👤 От: {user_name} ({user_info})
+📝 Вопрос: {user_question}
+
+Отправлено: {message.date.strftime('%d.%m.%Y %H:%M')}"""
+
+    try:
+        # Отправляем сообщение администратору
+        await bot.send_message(chat_id=ADMIN_CHAT_ID, text=support_message)
+
+        confirmation_text = f"""✅ Ваш вопрос получен и отправлен ведущему курса!
 
 📝 Вопрос: {user_question}
 
 👤 От: {user_name} ({user_info})
 
-⏰ Мы ответим вам в ближайшее время!
+⏰ Елена ответит вам в ближайшее время!
 
-📞 Для срочных вопросов обращайтесь напрямую к ведущему курса: {ELENA_CONTACT}"""
+📞 Для срочных вопросов обращайтесь напрямую: {ELENA_CONTACT}"""
+
+    except Exception as e:
+        logging.error(f"Failed to send message to admin: {e}")
+        confirmation_text = f"""✅ Ваш вопрос получен!
+
+📝 Вопрос: {user_question}
+
+👤 От: {user_name} ({user_info})
+
+⚠️ Возникла техническая проблема с автоматической отправкой.
+📞 Пожалуйста, обратитесь напрямую к ведущему курса: {ELENA_CONTACT}"""
 
     await message.answer(confirmation_text)
     await state.clear()
 
 @dp.message()
 async def handle_other_messages(message: Message):
+    # Добавляем пользователя в БД
+    await add_user_to_db(message.from_user)
+    # Логируем любое другое сообщение
+    await log_message_to_db(message.from_user, message.text, "other_message")
+
     help_text = f"""❓ Используйте меню для навигации по боту или обратитесь за помощью к ведущему курса: {ELENA_CONTACT}"""
     await message.answer(help_text, reply_markup=get_main_keyboard())
 
 async def main():
     logging.basicConfig(level=logging.INFO)
+
+    # Инициализация базы данных при запуске
+    await init_database()
+
     await dp.start_polling(bot)
 
 if __name__ == '__main__':
