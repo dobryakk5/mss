@@ -21,6 +21,9 @@ ADMIN_CHAT_ID = 269435099  # chat_id администратора
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
+# Импортируем тестовый роутер
+from test_module import test_router
+
 # Функции для работы с базой данных
 async def get_db_connection():
     try:
@@ -113,7 +116,7 @@ def get_main_keyboard():
         [KeyboardButton(text="📚 Узнать о курсе"), KeyboardButton(text="👥 Для какого возраста")],
         [KeyboardButton(text="📋 Формат занятий"), KeyboardButton(text="🎯 Результаты курса")],
         [KeyboardButton(text="⏰ Как проходят занятия"), KeyboardButton(text="💰 Оплата")],
-        [KeyboardButton(text="📄 Договор оферты"), KeyboardButton(text="🆘 Связаться с поддержкой")]
+        [KeyboardButton(text="🆘 Связаться с поддержкой"), KeyboardButton(text="🧩 Пройти тест")]
     ], resize_keyboard=True)
 
 def get_support_keyboard():
@@ -335,23 +338,17 @@ async def handle_payment_info(message: Message):
 
 💳 Оплата производится на карту по номеру телефона на Сбер
 📱 После оплаты нужно прислать скрин в личные сообщения.
-🧾 Вам будет выслан чек об оплате."""
+🧾 Вам будет выслан чек об оплате.
 
-    await message.answer(payment_text)
-
-@dp.message(lambda message: message.text == "📄 Договор оферты")
-async def handle_contract_info(message: Message):
-    await add_user_to_db(message.from_user)
-    await log_message_to_db(message.from_user, message.text, "menu_button")
-    contract_text = """📄 Прочитайте договор оферты перед оплатой
-
-📋 Договор оферты содержит все необходимые условия предоставления услуг по курсу "Излагай ясно".
+📄 Договор оферты
+Договор оферты содержит все необходимые условия предоставления услуг по курсу "Излагай ясно".
 
 ⚠️ Внимательно ознакомьтесь с условиями договора перед оплатой курса.
 
 📞 Если у вас есть вопросы по договору, обратитесь к ведущему курса."""
 
-    await message.answer(contract_text)
+    await message.answer(payment_text)
+
 
 @dp.message(lambda message: message.text == "🆘 Связаться с поддержкой")
 async def handle_support_button(message: Message, state: FSMContext):
@@ -438,6 +435,9 @@ async def handle_other_messages(message: Message):
 
 async def main():
     logging.basicConfig(level=logging.INFO)
+
+    # Подключаем роутер для тестов
+    dp.include_router(test_router)
 
     # Инициализация базы данных при запуске
     await init_database()
