@@ -425,6 +425,10 @@ async def process_support_question(message: Message, state: FSMContext):
 
 @dp.message()
 async def handle_other_messages(message: Message):
+    # Проверяем, не является ли это сообщением для теста (обрабатывается в test_router)
+    if message.text and "🧩 Мини тест" in message.text:
+        return
+
     # Добавляем пользователя в БД
     await add_user_to_db(message.from_user)
     # Логируем любое другое сообщение
