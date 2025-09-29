@@ -116,7 +116,7 @@ def get_main_keyboard():
         [KeyboardButton(text="📚 Узнать о курсе"), KeyboardButton(text="👥 Для какого возраста")],
         [KeyboardButton(text="📋 Формат занятий"), KeyboardButton(text="🎯 Результаты курса")],
         [KeyboardButton(text="⏰ Как проходят занятия"), KeyboardButton(text="💰 Оплата")],
-        [KeyboardButton(text="🆘 Связаться с поддержкой"), KeyboardButton(text="🧩 Пройти тест")]
+        [KeyboardButton(text="🆘 Связаться с поддержкой"), KeyboardButton(text="🧩 Мини тест")]
     ], resize_keyboard=True)
 
 def get_support_keyboard():

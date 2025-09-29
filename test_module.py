@@ -17,7 +17,7 @@ class TestStates(StatesGroup):
 
 # --- Клавиатуры ---
 start_test_kb = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="🧩 Пройти тест")]],
+    keyboard=[[KeyboardButton(text="🧩 Мини тест")]],
     resize_keyboard=True
 )
 
@@ -85,7 +85,7 @@ async def log_test_result_to_db(user, answers, level):
             await conn.close()
 
 # --- Хэндлеры ---
-@test_router.message(F.text == "🧩 Пройти тест уровня")
+@test_router.message(F.text == "🧩 Мини тест")
 async def start_test(message: Message, state: FSMContext):
     from bot import add_user_to_db, log_message_to_db
     await add_user_to_db(message.from_user)
